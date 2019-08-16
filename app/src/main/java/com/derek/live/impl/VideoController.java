@@ -1,8 +1,10 @@
 package com.derek.live.impl;
 
+import android.app.Activity;
 import android.content.Context;
 import android.hardware.Camera;
 import android.util.Log;
+import android.view.Surface;
 import android.view.SurfaceHolder;
 
 import com.derek.live.Interface.Controller;
@@ -16,11 +18,11 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
     private SurfaceHolder surfaceHolder;
     private Camera mCamera;
     private byte[] buffers;
-    Context context;
+    Activity ac;
     private boolean surfaceCreated;
 
-    public VideoController(Context context, SurfaceHolder surfaceHolder) {
-        this.context = context.getApplicationContext();
+    public VideoController(Activity ac, SurfaceHolder surfaceHolder) {
+        this.ac = ac;
         this.surfaceHolder = surfaceHolder;
         this.surfaceHolder.addCallback(this);
     }
@@ -88,12 +90,60 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
 //            pushNative.fireVideo(data);
 
     }
+//
+//        public static void setCameraDisplayOrientation(Activity activity,
+//     *         int cameraId, android.hardware.Camera camera) {
+//     *     android.hardware.Camera.CameraInfo info =
+//     *             new android.hardware.Camera.CameraInfo();
+//     *     android.hardware.Camera.getCameraInfo(cameraId, info);
+//     *     int rotation = activity.getWindowManager().getDefaultDisplay()
+//                *             .getRotation();
+//     *     int degrees = 0;
+//     *     switch (rotation) {
+//     *         case Surface.ROTATION_0: degrees = 0; break;
+//     *         case Surface.ROTATION_90: degrees = 90; break;
+//     *         case Surface.ROTATION_180: degrees = 180; break;
+//     *         case Surface.ROTATION_270: degrees = 270; break;
+//     *     }
+//     *
+//     *     int result;
+//     *     if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+//     *         result = (info.orientation + degrees) % 360;
+//     *         result = (360 - result) % 360;  // compensate the mirror
+//     *     } else {  // back-facing
+//     *         result = (info.orientation - degrees + 360) % 360;
+//     *     }
+//     *     camera.setDisplayOrientation(result);
+//     * }
 
+    /**
+     * 开始预览界面
+     */
     private void startPreview() {
         try {
             //SurfaceView初始化完成，开始相机预览
             mCamera = Camera.open(GlobalConfig.Camera_ID);
             mCamera.setPreviewDisplay(surfaceHolder);
+
+//            设置相机的方向
+            Camera.CameraInfo info = new Camera.CameraInfo();
+            android.hardware.Camera.getCameraInfo(GlobalConfig.Camera_ID, info);
+            int rotation = ac.getWindowManager().getDefaultDisplay().getRotation();
+            int degrees = 0;
+            switch (rotation) {
+                case Surface.ROTATION_0: degrees = 0; break;
+                case Surface.ROTATION_90: degrees = 90; break;
+                case Surface.ROTATION_180: degrees = 180; break;
+                case Surface.ROTATION_270: degrees = 270; break;
+            }
+            int result;
+            if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
+                result = (info.orientation + degrees) % 360;
+                result = (360 - result) % 360;  // compensate the mirror
+            } else {  // back-facing
+                result = (info.orientation - degrees + 360) % 360;
+            }
+            mCamera.setDisplayOrientation(result);
             //获取预览图像数据
             buffers = new byte[GlobalConfig.Video_Width * GlobalConfig.Video_Height * 4];
             mCamera.addCallbackBuffer(buffers);
@@ -105,6 +155,9 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
         }
     }
 
+    /**
+     * 停止预览界面
+     */
     private void stopPreview(){
         if (mCamera !=null){
             mCamera.stopPreview();
@@ -113,12 +166,15 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
         }
     }
 
+    /**
+     * 切换摄像机
+     */
     public void  switchCamera(){
         int cameraIdTemp ;
         if (GlobalConfig.Camera_ID == Camera.CameraInfo.CAMERA_FACING_BACK){
             cameraIdTemp = Camera.CameraInfo.CAMERA_FACING_FRONT;
         }else{
-            cameraIdTemp = Camera.CameraInfo.CAMERA_FACING_FRONT;
+            cameraIdTemp = Camera.CameraInfo.CAMERA_FACING_BACK;
         }
 
         GlobalConfig.Camera_ID = cameraIdTemp;

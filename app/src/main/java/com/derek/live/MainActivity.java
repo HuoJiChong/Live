@@ -16,9 +16,7 @@ import com.derek.live.impl.LiveController;
 public class MainActivity extends AppCompatActivity {
 
     // Used to load the 'native-lib' library on application startup.
-    static {
-        System.loadLibrary("native-lib");
-    }
+
 
     public static final String TAG = MainActivity.class.getName();
 
@@ -35,7 +33,7 @@ public class MainActivity extends AppCompatActivity {
         surfaceView = findViewById(R.id.videoView);
         SurfaceHolder holder = surfaceView.getHolder();
 
-        liveController = new LiveController(getApplicationContext(),holder);
+        liveController = new LiveController(this,holder);
     }
 
     private void requestPer() {
@@ -47,11 +45,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    /**
-     * A native method that is implemented by the 'native-lib' native library,
-     * which is packaged with this application.
-     */
-    public native String stringFromJNI();
+
 
     public  void  recordStart(View v){
         Button btn = (Button) v;

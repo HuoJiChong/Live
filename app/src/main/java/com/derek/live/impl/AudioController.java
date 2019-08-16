@@ -1,5 +1,6 @@
 package com.derek.live.impl;
 
+import android.app.Activity;
 import android.content.Context;
 import android.media.AudioRecord;
 import android.os.Process;
@@ -11,6 +12,9 @@ import com.derek.live.config.GlobalConfig;
 public class AudioController extends Controller {
 
     private static final String TAG = AudioController.class.getName();
+    /**
+     * 音频采样参数
+     */
     private AudioRecord audioRecord;
     private int audioResource;
     private int audioSampleRate;
@@ -18,17 +22,16 @@ public class AudioController extends Controller {
     private int audioFormat;
     private int bufferSizeInBytes;
 
-
     public Context context;
 
-    public AudioController(Context context) {
+    public AudioController(Activity ac) {
         audioResource = GlobalConfig.AUDIO_RESOURCE;
         audioSampleRate = GlobalConfig.AUDIO_SAMPLE_RATE;
         channelConfig = GlobalConfig.CHANNEL_CONFIG;
         audioFormat = GlobalConfig.AUDIO_FORMAT;
         bufferSizeInBytes = AudioRecord.getMinBufferSize(audioSampleRate,channelConfig,audioFormat);
         audioRecord = new AudioRecord(audioResource, audioSampleRate, channelConfig, audioFormat, bufferSizeInBytes);
-        this.context = context;
+        this.context = ac.getApplicationContext();
     }
 
     @Override
@@ -40,21 +43,31 @@ public class AudioController extends Controller {
         new Thread(recordTask).start();
     }
 
-
+    /**
+     * 释放资源
+     */
     @Override
     public void onRelease() {
         isRecording = false;
-        audioRecord.stop();
-        audioRecord.release();
-        audioRecord = null;
+        if (audioRecord !=null ){
+            audioRecord.stop();
+            audioRecord.release();
+            audioRecord = null;
+        }
     }
 
+    /**
+     * 暂停播放
+     */
     @Override
     public void onPause() {
         isRecording = false;
         audioRecord.stop();
     }
 
+    /**
+     * 开启子线程采集音频
+     */
     private Runnable recordTask = new Runnable() {
         @Override
         public void run() {

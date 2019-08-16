@@ -1,5 +1,6 @@
 package com.derek.live.impl;
 
+import android.app.Activity;
 import android.content.Context;
 import android.view.SurfaceHolder;
 
@@ -11,10 +12,10 @@ public class LiveController extends Controller {
     VideoController videoController;
 
     Context context;
-    public LiveController(Context context,SurfaceHolder surfaceHolder) {
-        this.context = context.getApplicationContext();
-        audioController = new AudioController(context);
-        videoController = new VideoController(context,surfaceHolder);
+    public LiveController(Activity ac, SurfaceHolder surfaceHolder) {
+        this.context = ac.getApplicationContext();
+        audioController = new AudioController(ac);
+        videoController = new VideoController(ac,surfaceHolder);
     }
 
     public void switchCamera(){
