@@ -1,18 +1,16 @@
 package com.derek.live.impl;
 
 import android.content.Context;
-import android.media.AudioFormat;
 import android.media.AudioRecord;
-import android.media.MediaRecorder;
 import android.os.Process;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.derek.live.Interface.Controller;
+import com.derek.live.config.GlobalConfig;
 
 public class AudioController extends Controller {
 
-    private static final String TAG = AudioRecordUtil.class.getName();
+    private static final String TAG = AudioController.class.getName();
     private AudioRecord audioRecord;
     private int audioResource;
     private int audioSampleRate;
@@ -24,10 +22,10 @@ public class AudioController extends Controller {
     public Context context;
 
     public AudioController(Context context) {
-        audioResource = MediaRecorder.AudioSource.MIC;
-        audioSampleRate = 44100;
-        channelConfig = AudioFormat.CHANNEL_IN_STEREO;
-        audioFormat = AudioFormat.ENCODING_PCM_16BIT;
+        audioResource = GlobalConfig.AUDIO_RESOURCE;
+        audioSampleRate = GlobalConfig.AUDIO_SAMPLE_RATE;
+        channelConfig = GlobalConfig.CHANNEL_CONFIG;
+        audioFormat = GlobalConfig.AUDIO_FORMAT;
         bufferSizeInBytes = AudioRecord.getMinBufferSize(audioSampleRate,channelConfig,audioFormat);
         audioRecord = new AudioRecord(audioResource, audioSampleRate, channelConfig, audioFormat, bufferSizeInBytes);
         this.context = context;
@@ -36,7 +34,6 @@ public class AudioController extends Controller {
     @Override
     public void onStart() {
         if (isRecording){
-            Toast.makeText(this.context,"audio recording ....",Toast.LENGTH_SHORT).show();
             return;
         }
         //创建一个流，存放从AudioRecord读取的数据
@@ -45,7 +42,7 @@ public class AudioController extends Controller {
 
 
     @Override
-    public void onStop() {
+    public void onRelease() {
         isRecording = false;
         audioRecord.stop();
         audioRecord.release();
@@ -53,13 +50,9 @@ public class AudioController extends Controller {
     }
 
     @Override
-    public void onResume() {
-        isRecording = true;
-    }
-
-    @Override
     public void onPause() {
         isRecording = false;
+        audioRecord.stop();
     }
 
     private Runnable recordTask = new Runnable() {

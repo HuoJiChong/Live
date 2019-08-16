@@ -4,7 +4,6 @@ import android.content.Context;
 import android.view.SurfaceHolder;
 
 import com.derek.live.Interface.Controller;
-import com.derek.live.params.VideoParam;
 
 public class LiveController extends Controller {
 
@@ -14,8 +13,12 @@ public class LiveController extends Controller {
     Context context;
     public LiveController(Context context,SurfaceHolder surfaceHolder) {
         this.context = context.getApplicationContext();
-        VideoParam videoParam = new VideoParam(480,320, android.hardware.Camera.CameraInfo.CAMERA_FACING_BACK);
-        videoController = new VideoController(surfaceHolder,videoParam);
+        audioController = new AudioController(context);
+        videoController = new VideoController(context,surfaceHolder);
+    }
+
+    public void switchCamera(){
+        videoController.switchCamera();
     }
 
     @Override
@@ -25,15 +28,9 @@ public class LiveController extends Controller {
     }
 
     @Override
-    public void onStop() {
-        audioController.onStop();
-        videoController.onStop();
-    }
-
-    @Override
-    public void onResume() {
-        audioController.onResume();
-        videoController.onResume();
+    public void onRelease() {
+        audioController.onRelease();
+        videoController.onRelease();
     }
 
     @Override
