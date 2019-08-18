@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.graphics.ImageFormat;
 import android.hardware.Camera;
 import android.util.Log;
+import android.util.Size;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 
@@ -12,6 +13,7 @@ import com.derek.live.JniPush.Pusher;
 import com.derek.live.config.GlobalConfig;
 
 import java.io.IOException;
+import java.util.List;
 
 public class VideoController extends Controller implements SurfaceHolder.Callback, Camera.PreviewCallback {
     public static final String TAG = VideoController.class.getName();
@@ -103,7 +105,16 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
         try {
             //SurfaceView初始化完成，开始相机预览
             mCamera = Camera.open(GlobalConfig.Camera_ID);
-            mCamera.setPreviewDisplay(surfaceHolder);
+
+            Camera.Parameters parameters = mCamera.getParameters();
+            parameters.setPictureFormat(ImageFormat.NV21);
+            parameters.setPreviewSize(GlobalConfig.Video_Width,GlobalConfig.Video_Height);
+            List<Camera.Size> supportSize = parameters.getSupportedPictureSizes();
+            for (int i = 0;i<supportSize.size();i++){
+                Camera.Size size = supportSize.get(i);
+                Log.e(TAG,size.width + " " + size.height);
+            }
+            mCamera.setParameters(parameters);
 
 //            设置相机的方向
             Camera.CameraInfo info = new Camera.CameraInfo();
@@ -125,9 +136,8 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
             }
             mCamera.setDisplayOrientation(result);
 
-            Camera.Parameters parameters = mCamera.getParameters();
-            parameters.setPictureFormat(ImageFormat.NV21);
-            parameters.setPreviewSize(GlobalConfig.Video_Width,GlobalConfig.Video_Height);
+
+            mCamera.setPreviewDisplay(surfaceHolder);
 //            parameters.setPreviewFpsRange(GlobalConfig.VIDEO_FPS - 1,GlobalConfig.VIDEO_FPS);
 
             //获取预览图像数据

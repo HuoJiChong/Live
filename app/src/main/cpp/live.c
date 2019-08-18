@@ -170,8 +170,8 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_setVideoOptions
     param.i_fps_num = fps;
     param.i_fps_den = 1;
     //???????????????????????????
-    param.i_timebase_den = param.i_fps_num;
-    param.i_timebase_num = param.i_fps_den;
+    param.i_timebase_den = param.i_fps_den;
+    param.i_timebase_num = param.i_fps_num;
     param.i_threads = 1;//并行编码线程数量，0默认为多线程
 
     param.b_repeat_headers = 1;

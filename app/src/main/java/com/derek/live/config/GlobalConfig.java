@@ -14,8 +14,8 @@ public class GlobalConfig {
     public final static int AUDIO_FORMAT = AudioFormat.ENCODING_PCM_16BIT;
 
 
-    public final static int Video_Width = 720;
-    public final static int Video_Height = 1280;
+    public final static int Video_Width = 1280;
+    public final static int Video_Height = 720;
     //码率
     public final static int VIDEO_BITRATE = 480000;// 480k bps
     //帧频
