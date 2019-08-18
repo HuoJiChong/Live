@@ -1,13 +1,14 @@
 package com.derek.live.impl;
 
 import android.app.Activity;
-import android.content.Context;
+import android.graphics.ImageFormat;
 import android.hardware.Camera;
 import android.util.Log;
 import android.view.Surface;
 import android.view.SurfaceHolder;
 
 import com.derek.live.Interface.Controller;
+import com.derek.live.JniPush.Pusher;
 import com.derek.live.config.GlobalConfig;
 
 import java.io.IOException;
@@ -21,7 +22,8 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
     Activity ac;
     private boolean surfaceCreated;
 
-    public VideoController(Activity ac, SurfaceHolder surfaceHolder) {
+    public VideoController(Activity ac, SurfaceHolder surfaceHolder, Pusher pusher) {
+        super(pusher);
         this.ac = ac;
         this.surfaceHolder = surfaceHolder;
         this.surfaceHolder.addCallback(this);
@@ -32,6 +34,7 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
         isRecording = true;
         if (surfaceCreated){
             isRecording = true;
+            nativePusher.setVideoOptions(GlobalConfig.Video_Width,GlobalConfig.Video_Height,GlobalConfig.VIDEO_BITRATE,GlobalConfig.VIDEO_FPS);
             startPreview();
         }else{
             try {
@@ -81,6 +84,8 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
                 mCamera.addCallbackBuffer(buffers);
             }
 
+            nativePusher.fireVideo(data);
+
         }
 
         Log.e(TAG," onPreviewFrame ");
@@ -90,31 +95,6 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
 //            pushNative.fireVideo(data);
 
     }
-//
-//        public static void setCameraDisplayOrientation(Activity activity,
-//     *         int cameraId, android.hardware.Camera camera) {
-//     *     android.hardware.Camera.CameraInfo info =
-//     *             new android.hardware.Camera.CameraInfo();
-//     *     android.hardware.Camera.getCameraInfo(cameraId, info);
-//     *     int rotation = activity.getWindowManager().getDefaultDisplay()
-//                *             .getRotation();
-//     *     int degrees = 0;
-//     *     switch (rotation) {
-//     *         case Surface.ROTATION_0: degrees = 0; break;
-//     *         case Surface.ROTATION_90: degrees = 90; break;
-//     *         case Surface.ROTATION_180: degrees = 180; break;
-//     *         case Surface.ROTATION_270: degrees = 270; break;
-//     *     }
-//     *
-//     *     int result;
-//     *     if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
-//     *         result = (info.orientation + degrees) % 360;
-//     *         result = (360 - result) % 360;  // compensate the mirror
-//     *     } else {  // back-facing
-//     *         result = (info.orientation - degrees + 360) % 360;
-//     *     }
-//     *     camera.setDisplayOrientation(result);
-//     * }
 
     /**
      * 开始预览界面
@@ -144,6 +124,12 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
                 result = (info.orientation - degrees + 360) % 360;
             }
             mCamera.setDisplayOrientation(result);
+
+            Camera.Parameters parameters = mCamera.getParameters();
+            parameters.setPictureFormat(ImageFormat.NV21);
+            parameters.setPreviewSize(GlobalConfig.Video_Width,GlobalConfig.Video_Height);
+//            parameters.setPreviewFpsRange(GlobalConfig.VIDEO_FPS - 1,GlobalConfig.VIDEO_FPS);
+
             //获取预览图像数据
             buffers = new byte[GlobalConfig.Video_Width * GlobalConfig.Video_Height * 4];
             mCamera.addCallbackBuffer(buffers);

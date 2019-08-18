@@ -7,6 +7,7 @@ import android.os.Process;
 import android.util.Log;
 
 import com.derek.live.Interface.Controller;
+import com.derek.live.JniPush.Pusher;
 import com.derek.live.config.GlobalConfig;
 
 public class AudioController extends Controller {
@@ -24,7 +25,8 @@ public class AudioController extends Controller {
 
     public Context context;
 
-    public AudioController(Activity ac) {
+    public AudioController(Activity ac, Pusher pusher) {
+        super(pusher);
         audioResource = GlobalConfig.AUDIO_RESOURCE;
         audioSampleRate = GlobalConfig.AUDIO_SAMPLE_RATE;
         channelConfig = GlobalConfig.CHANNEL_CONFIG;
@@ -84,10 +86,11 @@ public class AudioController extends Controller {
             Log.e(TAG, audioRecord.getRecordingState()+"");
             while (isRecording && audioRecord.getRecordingState() == AudioRecord.RECORDSTATE_RECORDING) {
                 //读取采集数据到缓冲区中，read就是读取到的数据量
-                final int read = audioRecord.read(data, 0, bufferSizeInBytes);
+                int read = audioRecord.read(data, 0, bufferSizeInBytes);
                 if (AudioRecord.ERROR_INVALID_OPERATION != read && AudioRecord.ERROR != read){
                     //将数据写入到文件中  传递给Native,
 
+                    nativePusher.fireAudio(data,read);
                 }
             }
         }

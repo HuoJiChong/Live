@@ -11,12 +11,14 @@ import android.view.SurfaceView;
 import android.view.View;
 import android.widget.Button;
 
+import com.derek.live.JniPush.Pusher;
 import com.derek.live.impl.LiveController;
 
 public class MainActivity extends AppCompatActivity {
 
     // Used to load the 'native-lib' library on application startup.
 
+    private final static String URL = "rtmp://39.100.153.163/live360p/test";
 
     public static final String TAG = MainActivity.class.getName();
 
@@ -34,12 +36,13 @@ public class MainActivity extends AppCompatActivity {
         SurfaceHolder holder = surfaceView.getHolder();
 
         liveController = new LiveController(this,holder);
+
     }
 
     private void requestPer() {
-        String [] perms = {Manifest.permission.RECORD_AUDIO,Manifest.permission.WRITE_EXTERNAL_STORAGE,Manifest.permission.CAMERA};
+        String [] perms = {Manifest.permission.RECORD_AUDIO,Manifest.permission.WRITE_EXTERNAL_STORAGE,Manifest.permission.CAMERA,Manifest.permission.INTERNET};
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (checkSelfPermission(perms[0]) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(perms[1]) == PackageManager.PERMISSION_DENIED){
+            if (checkSelfPermission(perms[0]) == PackageManager.PERMISSION_GRANTED || checkSelfPermission(perms[1]) == PackageManager.PERMISSION_DENIED || checkSelfPermission(perms[2]) == PackageManager.PERMISSION_DENIED || checkSelfPermission(perms[3]) == PackageManager.PERMISSION_DENIED){
                 requestPermissions(perms,200);
             }
         }
@@ -51,7 +54,7 @@ public class MainActivity extends AppCompatActivity {
         Button btn = (Button) v;
         Log.e(TAG,"" + btn.getText().toString().trim());
         if(btn.getText().toString().equals( "START")){
-            liveController.onStart();
+            liveController.onStart(URL);
             btn.setText("STOP");
         }else{
             btn.setText("START");

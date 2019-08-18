@@ -16,5 +16,9 @@ public class GlobalConfig {
 
     public final static int Video_Width = 720;
     public final static int Video_Height = 1280;
+    //码率
+    public final static int VIDEO_BITRATE = 480000;// 480k bps
+    //帧频
+    public final static int VIDEO_FPS = 25;
     public static int Camera_ID = Camera.CameraInfo.CAMERA_FACING_BACK;
 }

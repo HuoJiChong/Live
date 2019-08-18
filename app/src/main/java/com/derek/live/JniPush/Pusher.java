@@ -40,7 +40,4 @@ public class Pusher {
      */
     public native void fireAudio(byte[] data, int len);
 
-    static{
-        System.loadLibrary("dn_live");
-    }
 }
