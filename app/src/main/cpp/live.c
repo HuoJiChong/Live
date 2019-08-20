@@ -7,6 +7,7 @@
 
 #include <pthread.h>
 #include <android/log.h>
+#include <faac/faac.h>
 #include "x264/x264.h"
 #include "rtmp/rtmp.h"
 #include "queue.h"
@@ -14,20 +15,39 @@
 #define LOGI(FORMAT,...) __android_log_print(ANDROID_LOG_INFO,"jason",FORMAT,##__VA_ARGS__);
 #define LOGE(FORMAT,...) __android_log_print(ANDROID_LOG_ERROR,"jason",FORMAT,##__VA_ARGS__);
 
+#define CONNECT_FAILED 101
+#define INIT_FAILED 102
+#define CONNECT_SUCCESS 103
+#define INIT_SUCCESS 104
+#define START_PUSH 105
+
 x264_picture_t pic_in;
 x264_picture_t pic_out;
 x264_t * video_encoder_handle;
 
 int y_len,u_len,v_len;
 
+jobject jobj_push_native; //Global ref
+jclass jcls_push_native;
+jmethodID jmid_throw_native_error;
+
 pthread_mutex_t mutex;
 pthread_cond_t cond;
+
+unsigned long nInputSamples; //输入的采样个数
+unsigned long nMaxOutputBytes; //编码输出之后的字节数
+
+int is_pushing = FALSE;
+
+//faac音频编码处理器
+faacEncHandle audio_encode_handle;
 
 unsigned int start_time;
 
 //rtmp流媒体地址
 char *rtmp_path;
 
+JavaVM *javaVM;
 
 /**
  * 加入RTMPPacket队列，等待发送线程发送
@@ -39,11 +59,83 @@ void add_rtmp_packet(RTMPPacket *packet){
     pthread_mutex_unlock(&mutex);
 }
 
+//获取JavaVM
+jint JNI_OnLoad(JavaVM* vm, void* reserved){
+    javaVM = vm;
+    return JNI_VERSION_1_6;
+}
+
+/**
+ * 向Java层发送错误信息
+ */
+void throwNativeError(JNIEnv *env,int code){
+    if(jobj_push_native && jmid_throw_native_error )
+        (*env)->CallVoidMethod(env,jobj_push_native,jmid_throw_native_error,code);
+}
+
+
+/**
+ * 添加AAC头信息
+ */
+void add_aac_sequence_header(){
+    //获取aac头信息的长度
+    unsigned char *buf;
+    unsigned long len; //长度
+    faacEncGetDecoderSpecificInfo(audio_encode_handle,&buf,&len);
+    int body_size = 2 + len;
+    RTMPPacket *packet = malloc(sizeof(RTMPPacket));
+    //RTMPPacket初始化
+    RTMPPacket_Alloc(packet,body_size);
+    RTMPPacket_Reset(packet);
+    char * body = packet->m_body;
+    //头信息配置
+    /*AF 00 + AAC RAW data*/
+    body[0] = 0xAF;//10 5 SoundFormat(4bits):10=AAC,SoundRate(2bits):3=44kHz,SoundSize(1bit):1=16-bit samples,SoundType(1bit):1=Stereo sound
+    body[1] = 0x00;//AACPacketType:0表示AAC sequence header
+    memcpy(&body[2], buf, len); /*spec_buf是AAC sequence header数据*/
+    packet->m_packetType = RTMP_PACKET_TYPE_AUDIO;
+    packet->m_nBodySize = body_size;
+    packet->m_nChannel = 0x04;
+    packet->m_hasAbsTimestamp = 0;
+    packet->m_nTimeStamp = 0;
+    packet->m_headerType = RTMP_PACKET_SIZE_MEDIUM;
+    add_rtmp_packet(packet);
+    free(buf);
+
+}
+
+
+/**
+ * 添加AAC rtmp packet
+ */
+void add_aac_body(unsigned char *buf, int len){
+    int body_size = 2 + len;
+    RTMPPacket *packet = malloc(sizeof(RTMPPacket));
+    //RTMPPacket初始化
+    RTMPPacket_Alloc(packet,body_size);
+    RTMPPacket_Reset(packet);
+    char * body = packet->m_body;
+    //头信息配置
+    /*AF 00 + AAC RAW data*/
+    body[0] = 0xAF;//10 5 SoundFormat(4bits):10=AAC,SoundRate(2bits):3=44kHz,SoundSize(1bit):1=16-bit samples,SoundType(1bit):1=Stereo sound
+    body[1] = 0x01;//AACPacketType:1表示AAC raw
+    memcpy(&body[2], buf, len); /*spec_buf是AAC raw数据*/
+    packet->m_packetType = RTMP_PACKET_TYPE_AUDIO;
+    packet->m_nBodySize = body_size;
+    packet->m_nChannel = 0x04;
+    packet->m_hasAbsTimestamp = 0;
+    packet->m_headerType = RTMP_PACKET_SIZE_LARGE;
+    packet->m_nTimeStamp = RTMP_GetTime() - start_time;
+    add_rtmp_packet(packet);
+}
 
 /**
  * 从队列中不断拉取RTMPPacket发送给流媒体服务器）
  */
 void *push_thread(void * arg){
+    JNIEnv* env;//获取当前线程JNIEnv
+    (*javaVM)->AttachCurrentThread(javaVM,&env,NULL);
+
     //建立RTMP连接
     RTMP *rtmp = RTMP_Alloc();
     if(!rtmp){
@@ -64,9 +156,15 @@ void *push_thread(void * arg){
     //计时
     start_time = RTMP_GetTime();
     if(!RTMP_ConnectStream(rtmp,0)){ //连接流
+        throwNativeError(env,CONNECT_FAILED);
         goto end;
+    }else{
+        throwNativeError(env,CONNECT_SUCCESS);
     }
-    for(;;){
+    is_pushing = TRUE;
+    add_aac_sequence_header();
+
+    while (is_pushing){
         //发送
         pthread_mutex_lock(&mutex);
         pthread_cond_wait(&cond,&mutex);
@@ -87,10 +185,12 @@ void *push_thread(void * arg){
 
         pthread_mutex_unlock(&mutex);
     }
-    end:
+end:
     LOGI("%s","释放资源");
+    free(rtmp_path);
     RTMP_Close(rtmp);
     RTMP_Free(rtmp);
+    (*javaVM)->DetachCurrentThread(javaVM);
     return 0;
 }
 
@@ -100,7 +200,20 @@ void *push_thread(void * arg){
  * Signature: (Ljava/lang/String;)V
  */
 JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_startPush
-        (JNIEnv * env, jobject obj, jstring jstr_url){
+        (JNIEnv * env, jobject jobj, jstring jstr_url){
+
+    jobj_push_native = (*env)->NewGlobalRef(env,jobj);
+
+    jclass jcls_push_native_tmp = (*env)->GetObjectClass(env,jobj);
+    jcls_push_native = (*env)->NewGlobalRef(env,jcls_push_native_tmp);
+    if(jcls_push_native_tmp == NULL){
+        LOGI("%s","NULL");
+    }else{
+        LOGI("%s","not NULL");
+    }
+    //PushNative.throwNativeError
+    jmid_throw_native_error = (*env)->GetMethodID(env,jcls_push_native_tmp,"throwNativeError","(I)V");
+
     //初始化的操作
     const char* url_cstr = (*env)->GetStringUTFChars(env,jstr_url,NULL);
     //复制url_cstr内容到rtmp_path
@@ -128,7 +241,14 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_startPush
  */
 JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_stopPush
         (JNIEnv * env, jobject obj){
-    free(rtmp_path);
+    is_pushing = FALSE;
+}
+
+void releaseGlobalRef(JNIEnv* env,jobject gObj){
+    if (gObj != NULL){
+        (*env)->DeleteGlobalRef(env,gObj);
+        gObj = NULL;
+    }
 }
 
 /*
@@ -138,7 +258,11 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_stopPush
  */
 JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_release
         (JNIEnv * env, jobject obj){
-
+    LOGE("%s","jobj_push_native");
+    releaseGlobalRef(env,jobj_push_native);
+    LOGE("%s","jcls_push_native");
+    releaseGlobalRef(env,jcls_push_native);
+    LOGE("%s","end");
 }
 
 /*
@@ -185,8 +309,10 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_setVideoOptions
     video_encoder_handle = x264_encoder_open(&param);
     if (video_encoder_handle){
         LOGI("%s","打开编码器成功。。。。。");
+        throwNativeError(env,INIT_SUCCESS);
+    }else{
+        throwNativeError(env,INIT_FAILED);
     }
-
 
 }
 
@@ -196,8 +322,32 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_setVideoOptions
  * Signature: (II)V
  */
 JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_setAudioOptions
-        (JNIEnv * env, jobject jobj, jint jsampleRateInHz, jint jchannel){
+        (JNIEnv * env, jobject jobj, jint sampleRateInHz, jint numChannels){
+    audio_encode_handle = faacEncOpen(sampleRateInHz,numChannels,&nInputSamples,&nMaxOutputBytes);
+    if(!audio_encode_handle){
+        LOGE("音频编码器打开失败");
+        return;
+    }
+    //设置音频编码参数
+    faacEncConfigurationPtr p_config = faacEncGetCurrentConfiguration(audio_encode_handle);
+    p_config->mpegVersion = MPEG4;
+    p_config->allowMidside = 1;
+    p_config->aacObjectType = LOW;
+    p_config->outputFormat = 0; //输出是否包含ADTS头
+    p_config->useTns = 1; //时域噪音控制,大概就是消爆音
+    p_config->useLfe = 0;
+//	p_config->inputFormat = FAAC_INPUT_16BIT;
+    p_config->quantqual = 100;
+    p_config->bandWidth = 0; //频宽
+    p_config->shortctl = SHORTCTL_NORMAL;
 
+    if(!faacEncSetConfiguration(audio_encode_handle,p_config)){
+        LOGE("%s","音频编码器配置失败..");
+        throwNativeError(env,INIT_FAILED);
+        return;
+    }
+
+    LOGI("%s","音频编码器配置成功");
 }
 
 void add_264_sequence_header(unsigned char* pps,unsigned char* sps,int pps_len,int sps_len){
@@ -207,7 +357,7 @@ void add_264_sequence_header(unsigned char* pps,unsigned char* sps,int pps_len,i
     RTMPPacket_Alloc(packet,body_size);
     RTMPPacket_Reset(packet);
 
-    unsigned char * body = packet->m_body;
+    char * body = packet->m_body;
     int i = 0;
     //二进制表示：00010111
     body[i++] = 0x17;//VideoHeaderTag:FrameType(1=key frame)+CodecID(7=AVC)
@@ -304,15 +454,16 @@ void add_264_body(uint8_t * buf,int len){
 
 }
 
+
 /*
  * Class:     com_derek_live_JniPush_Pusher
  * Method:    fireVideo
  * Signature: ([B)V
  */
 JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_fireVideo
-        (JNIEnv * env, jobject obj, jbyteArray jvideoDataArray){
+        (JNIEnv * env, jobject obj, jbyteArray buffer){
 
-    jbyte * nv21_buffer = (*env)->GetByteArrayElements(env,jvideoDataArray,NULL);
+    jbyte * nv21_buffer = (*env)->GetByteArrayElements(env,buffer,NULL);
     jbyte * u = pic_in.img.plane[1];
     jbyte * v = pic_in.img.plane[2];
 
@@ -342,17 +493,20 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_fireVideo
     for (int i = 0; i < n_nal; ++i) {
         if (nal[i].i_type == NAL_SPS){
             sps_len = nal[i].i_payload - 4;
-            memcpy(sps,nal[i].p_payload+4,sps_len);
+            LOGI("sps_len %d",sps_len);
+            memcpy(sps,nal[i].p_payload+4,(size_t)sps_len);
+
         }else if(nal[i].i_type == NAL_PPS){
             pps_len = nal[i].i_payload - 4;
-            memcpy(pps,nal[i].p_payload+4,pps_len);
+            LOGI("pps_len %d",pps_len);
+            memcpy(pps,nal[i].p_payload+4,(size_t)pps_len);
 
             add_264_sequence_header(pps,sps,pps_len,sps_len);
         }else{
             add_264_body(nal[i].p_payload,nal[i].i_payload);
         }
     }
-
+    (*env)->ReleaseByteArrayElements(env,buffer,nv21_buffer,0);
 }
 
 /*
@@ -361,8 +515,39 @@ JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_fireVideo
  * Signature: ([BI)V
  */
 JNIEXPORT void JNICALL Java_com_derek_live_JniPush_Pusher_fireAudio
-        (JNIEnv * env, jobject obj, jbyteArray jaudioDataArray, jint len){
-
+        (JNIEnv * env, jobject obj, jbyteArray buffer, jint len){
+    int *pcmbuf;
+    unsigned char *bitbuf;
+    jbyte* b_buffer = (*env)->GetByteArrayElements(env, buffer, 0);
+    pcmbuf = (int*) malloc(nInputSamples * sizeof(int));
+    bitbuf = (unsigned char*) malloc(nMaxOutputBytes * sizeof(unsigned char));
+    int nByteCount = 0;
+    unsigned int nBufferSize = (unsigned int) len / 2;
+    unsigned short* buf = (unsigned short*) b_buffer;
+    while (nByteCount < nBufferSize) {
+        unsigned int audioLength = nInputSamples;
+        if ((nByteCount + nInputSamples) >= nBufferSize) {
+            audioLength = nBufferSize - nByteCount;
+        }
+        int i;
+        for (i = 0; i < audioLength; i++) {//每次从实时的pcm音频队列中读出量化位数为8的pcm数据。
+            int s = ((int16_t *) buf + nByteCount)[i];
+            pcmbuf[i] = s << 8;//用8个二进制位来表示一个采样量化点（模数转换）
+        }
+        nByteCount += nInputSamples;
+        //利用FAAC进行编码，pcmbuf为转换后的pcm流数据，audioLength为调用faacEncOpen时得到的输入采样数，bitbuf为编码后的数据buff，nMaxOutputBytes为调用faacEncOpen时得到的最大输出字节数
+        int byteslen = faacEncEncode(audio_encode_handle, pcmbuf, audioLength,
+                                     bitbuf, nMaxOutputBytes);
+        if (byteslen < 1) {
+            continue;
+        }
+        add_aac_body(bitbuf, byteslen);//从bitbuf中得到编码后的aac数据流，放到数据队列
+    }
+    (*env)->ReleaseByteArrayElements(env, buffer, b_buffer, 0);
+    if (bitbuf)
+        free(bitbuf);
+    if (pcmbuf)
+        free(pcmbuf);
 }
 
 

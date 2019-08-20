@@ -1,8 +1,29 @@
 package com.derek.live.JniPush;
 
+import com.derek.live.listener.LiveStateChangeListener;
+
 public class Pusher {
     static {
         System.loadLibrary("live");
+    }
+
+    public static final int CONNECT_FAILED = 101;
+    public static final int INIT_FAILED = 102;
+
+    public static final int CONNECT_SUCCESS = 103;
+    public static final int INIT_SUCCESS = 104;
+    public static final int START_PUSH = 105;
+
+    LiveStateChangeListener liveStateChangeListener;
+
+    /**
+     * 接收Native层抛出的错误
+     * @param code
+     */
+    public void throwNativeError(int code){
+        if(liveStateChangeListener != null){
+            liveStateChangeListener.onError(code);
+        }
     }
 
     public native void startPush(String url);
@@ -39,5 +60,14 @@ public class Pusher {
      * @param len
      */
     public native void fireAudio(byte[] data, int len);
+
+
+    public void setLiveStateChangeListener(LiveStateChangeListener liveStateChangeListener) {
+        this.liveStateChangeListener = liveStateChangeListener;
+    }
+
+    public void removeLiveStateChangeListener(){
+        this.liveStateChangeListener = null;
+    }
 
 }

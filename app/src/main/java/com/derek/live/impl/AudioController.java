@@ -41,6 +41,7 @@ public class AudioController extends Controller {
         if (isRecording){
             return;
         }
+        nativePusher.setAudioOptions(GlobalConfig.AUDIO_SAMPLE_RATE,GlobalConfig.CHANNEL_CONFIG);
         //创建一个流，存放从AudioRecord读取的数据
         new Thread(recordTask).start();
     }

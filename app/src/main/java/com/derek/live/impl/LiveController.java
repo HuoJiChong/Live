@@ -4,16 +4,16 @@ import android.app.Activity;
 import android.content.Context;
 import android.view.SurfaceHolder;
 
-import com.derek.live.Interface.Controller;
 import com.derek.live.JniPush.Pusher;
+import com.derek.live.listener.LiveStateChangeListener;
 
 public class LiveController {
 
-    AudioController audioController;
-    VideoController videoController;
+    private AudioController audioController;
+    private VideoController videoController;
 
-    Context context;
-    Pusher pusher;
+    private Context context;
+    private Pusher pusher;
     public LiveController(Activity ac, SurfaceHolder surfaceHolder) {
         this.context = ac.getApplicationContext();
         pusher = new Pusher();
@@ -26,22 +26,23 @@ public class LiveController {
         videoController.switchCamera();
     }
 
-
-    public void onStart(String url) {
+    public void onStart(String url, LiveStateChangeListener liveStateChangeListener) {
         audioController.onStart();
         videoController.onStart();
         pusher.startPush(url);
+        pusher.setLiveStateChangeListener(liveStateChangeListener);
     }
 
     public void onRelease() {
         audioController.onRelease();
         videoController.onRelease();
+        pusher.release();
     }
-
 
     public void onPause() {
         audioController.onPause();
         videoController.onPause();
+        pusher.stopPush();
     }
 
 }

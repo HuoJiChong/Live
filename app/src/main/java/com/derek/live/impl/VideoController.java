@@ -60,7 +60,10 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
     @Override
     public void onPause() {
         isRecording = false;
-        mCamera.stopPreview();
+        if (mCamera != null){
+            mCamera.stopPreview();
+        }
+
     }
 
     @Override
@@ -85,17 +88,10 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
             if (mCamera != null) {
                 mCamera.addCallbackBuffer(buffers);
             }
-
+            //回调函数中获取图像数据，然后给Native代码编码
             nativePusher.fireVideo(data);
 
         }
-
-        Log.e(TAG," onPreviewFrame ");
-
-
-        //回调函数中获取图像数据，然后给Native代码编码
-//            pushNative.fireVideo(data);
-
     }
 
     /**
@@ -109,11 +105,6 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
             Camera.Parameters parameters = mCamera.getParameters();
             parameters.setPictureFormat(ImageFormat.NV21);
             parameters.setPreviewSize(GlobalConfig.Video_Width,GlobalConfig.Video_Height);
-            List<Camera.Size> supportSize = parameters.getSupportedPictureSizes();
-            for (int i = 0;i<supportSize.size();i++){
-                Camera.Size size = supportSize.get(i);
-                Log.e(TAG,size.width + " " + size.height);
-            }
             mCamera.setParameters(parameters);
 
 //            设置相机的方向
@@ -135,7 +126,6 @@ public class VideoController extends Controller implements SurfaceHolder.Callbac
                 result = (info.orientation - degrees + 360) % 360;
             }
             mCamera.setDisplayOrientation(result);
-
 
             mCamera.setPreviewDisplay(surfaceHolder);
 //            parameters.setPreviewFpsRange(GlobalConfig.VIDEO_FPS - 1,GlobalConfig.VIDEO_FPS);
